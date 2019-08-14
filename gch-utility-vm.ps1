@@ -321,7 +321,13 @@ $kvUrl = "$($tags['environment'])-kv-$($tags['namespace']).vault.azure.net"
 $kvSecret = "$($instance.compute.name)-admin-password"
 $content = (Invoke-WebRequest -UseBasicParsing -Uri https://$kvUrl/secrets/$($kvSecret)?api-version=2016-10-01 -Method GET -Headers @{Authorization = "Bearer $kvToken" }).content | ConvertFrom-Json
 
+# Create local user for VPN
+$vpnuser = 'gchvpn'
+write-output "Create autlogin user: $vpnuser"
+$null = New-LocalUser $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) -FullName "VPN Operator" -Description "Auto Login user to connect to vpn" -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword
+$null = Add-LocalGroupMember -Group "Remote Desktop Users" -Member $vpnuser
+
 write-output "Enable AutoLogon"
-Set-SecureAutoLogon -Username 'gchadmin' -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) 
+Set-SecureAutoLogon -Username $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) 
 Set-AutoRun -Name "Connect-VPN" -Path "powershell.exe -WindowStyle Hidden -File $psscriptroot\gch-utility-bootstrap.ps1"
 Stop-Transcript -ErrorAction SilentlyContinue
