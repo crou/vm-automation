@@ -1,3 +1,4 @@
+
 # this is an initial setup for a vm
 Start-Transcript -Path $psscriptroot\transcript.log -Force -ErrorAction SilentlyContinue
 
@@ -18,7 +19,7 @@ function install-vscode {
     }
 
     Write-Host "`nInstalling VS Code..." -ForegroundColor Yellow
-    Start-Process -Wait "$env:TEMP\vscode-$($BuildEdition).exe" -ArgumentList /silent, /mergetasks=!runcode    
+    Start-Process -Wait "$env:TEMP\vscode-$($BuildEdition).exe" -ArgumentList /silent, /mergetasks=!runcode
 
 }
 
@@ -27,30 +28,30 @@ function Set-SecureAutoLogon {
     param (
         [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]
         $Username,
-    
+
         [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [System.Security.SecureString]
         $Password,
-    
+
         [string]
         $Domain,
-    
+
         [Int]
         $AutoLogonCount,
-    
+
         [switch]
         $RemoveLegalPrompt,
-    
+
         [string]
         $BackupFile
     )
-    
+
     begin {
         [string] $WinlogonPath = "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon"
         [string] $WinlogonBannerPolicyPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-    
+
         [string] $Enable = 1
         [string] $Disable = 0
-    
+
         #region C# Code to P-invoke LSA LsaStorePrivateData function.
         Add-Type @"
             using System;
@@ -200,21 +201,21 @@ function Set-SecureAutoLogon {
 "@
         #endregion
     }
-    
+
     process {
-    
+
         try {
             $ErrorActionPreference = "Stop"
-    
+
             $decryptedPass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
                 [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
             )
-    
+
             if ($BackupFile) {
                 # Initialize the hash table with a string comparer to allow case sensitive keys.
                 # This allows differentiation between the winlogon and system policy logon banner strings.
                 $OrigionalSettings = New-Object System.Collections.Hashtable ([system.stringcomparer]::CurrentCulture)
-    
+
                 $OrigionalSettings.AutoAdminLogon = (Get-ItemProperty $WinlogonPath ).AutoAdminLogon
                 $OrigionalSettings.ForceAutoLogon = (Get-ItemProperty $WinlogonPath).ForceAutoLogon
                 $OrigionalSettings.DefaultUserName = (Get-ItemProperty $WinlogonPath).DefaultUserName
@@ -224,39 +225,39 @@ function Set-SecureAutoLogon {
                     Remove-ItemProperty -Path $WinlogonPath -Name DefaultPassword -Force
                 }
                 $OrigionalSettings.AutoLogonCount = (Get-ItemProperty $WinlogonPath).AutoLogonCount
-    
+
                 # The winlogon logon banner settings.
                 $OrigionalSettings.LegalNoticeCaption = (Get-ItemProperty $WinlogonPath).LegalNoticeCaption
                 $OrigionalSettings.LegalNoticeText = (Get-ItemProperty $WinlogonPath).LegalNoticeText
-    
+
                 # The system policy logon banner settings.
                 $OrigionalSettings.legalnoticecaption = (Get-ItemProperty $WinlogonBannerPolicyPath).legalnoticecaption
                 $OrigionalSettings.legalnoticetext = (Get-ItemProperty $WinlogonBannerPolicyPath).legalnoticetext
-    
+
                 $OrigionalSettings | Export-Clixml -Depth 10 -Path $BackupFile
             }
-    
+
             # Store the password securely.
             $lsaUtil = New-Object ComputerSystem.LSAutil -ArgumentList "DefaultPassword"
             $lsaUtil.SetSecret($decryptedPass)
-    
+
             # Store the autologon registry settings.
             Set-ItemProperty -Path $WinlogonPath -Name AutoAdminLogon -Value $Enable -Force
-    
+
             Set-ItemProperty -Path $WinlogonPath -Name DefaultUserName -Value $Username -Force
             Set-ItemProperty -Path $WinlogonPath -Name DefaultDomainName -Value $Domain -Force
-    
+
             if ($AutoLogonCount) {
                 Set-ItemProperty -Path $WinlogonPath -Name AutoLogonCount -Value $AutoLogonCount -Force
             }
             else {
                 try { Remove-ItemProperty -Path $WinlogonPath -Name AutoLogonCount -ErrorAction stop } catch { $global:error.RemoveAt(0) }
             }
-    
+
             if ($RemoveLegalPrompt) {
                 Set-ItemProperty -Path $WinlogonPath -Name LegalNoticeCaption -Value $null -Force
                 Set-ItemProperty -Path $WinlogonPath -Name LegalNoticeText -Value $null -Force
-    
+
                 Set-ItemProperty -Path $WinlogonBannerPolicyPath -Name legalnoticecaption -Value $null -Force
                 Set-ItemProperty -Path $WinlogonBannerPolicyPath -Name legalnoticetext -Value $null -Force
             }
@@ -264,7 +265,7 @@ function Set-SecureAutoLogon {
         catch {
             throw 'Failed to set auto logon. The error was: "{0}".' -f $_
         }
-    
+
     }
 }
 
@@ -273,7 +274,7 @@ function Set-AutoRun {
         $Path,
         $Name = "AutoRun"
     )
-    $runKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" 
+    $runKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
     $null = New-ItemProperty -Path $runKey -Name $Name -Value $Path -PropertyType ExpandString -Force
 }
 
@@ -313,21 +314,33 @@ if ($instance.compute.name -like 'tst*') {
     install-vscode
 }
 
-# Get the Azure Vault token 
+# Get the Azure Vault token
 write-output "Read Key Vault"
 $kv = Get-Metadata -Path '/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net'
-$kvToken = $kv.access_token 
+$kvToken = $kv.access_token
 $kvUrl = "$($tags['environment'])-kv-$($tags['namespace']).vault.azure.net"
 $kvSecret = "$($instance.compute.name)-admin-password"
 $content = (Invoke-WebRequest -UseBasicParsing -Uri https://$kvUrl/secrets/$($kvSecret)?api-version=2016-10-01 -Method GET -Headers @{Authorization = "Bearer $kvToken" }).content | ConvertFrom-Json
 
 # Create local user for VPN
 $vpnuser = 'gchvpn'
-write-output "Create autlogin user: $vpnuser"
-$null = New-LocalUser $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) -FullName "VPN Operator" -Description "Auto Login user to connect to vpn" -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword
-$null = Add-LocalGroupMember -Group "Remote Desktop Users" -Member $vpnuser
+$user = Get-LocalUser -Name $vpnuser -ErrorAction SilentlyContinue
+if ($user -eq $null) {
+    write-output "Create autlogin user: $vpnuser"
+    $null = New-LocalUser $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) -FullName "VPN Operator" -Description "Auto Login user to connect to vpn" -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword
+    $null = Add-LocalGroupMember -Group "Remote Desktop Users" -Member $vpnuser
+}
+# Install Cisco Anyconnect client
+if ((Test-Path -Path "${env:ProgramFiles(x86)}\Cisco\Cisco AnyConnect Secure Mobility Client\vpncli.exe") -eq $false) {
+    Write-Output "Download Anyconnect"
+    $anyconnectUrl = "https://$($tags['environment'])stinfraprovision.blob.core.windows.net/bin/anyconnect-win-3.1.00495-web-deploy-k9.exe"
+    $null = Invoke-WebRequest -UseBasicParsing -Uri $anyconnectUrl -OutFile "$env:TEMP\anyconnect.exe"
+    Write-Output "Install Anyconnect"
+    $null = Start-Process -FilePath "$env:TEMP\anyconnect.exe" -ArgumentList "/qn /norestart" -Wait
+}
 
-write-output "Enable AutoLogon"
-Set-SecureAutoLogon -Username $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) 
-Set-AutoRun -Name "Connect-VPN" -Path "powershell.exe -WindowStyle Hidden -File $psscriptroot\gch-utility-bootstrap.ps1"
+write-output "Enable AutoLogon for $vpnuser"
+Set-SecureAutoLogon -Username $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force)
+write-output "Enable the Bootstrap"
+Set-AutoRun -Name "Connect-VPN" -Path "powershell.exe -File $psscriptroot\gch-utility-bootstrap.ps1"
 Stop-Transcript -ErrorAction SilentlyContinue
