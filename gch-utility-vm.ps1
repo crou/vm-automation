@@ -14,7 +14,7 @@ function install-vscode {
     }
     # check if already downloaded
     if ((Test-Path -Path "$env:TEMP\vscode-$($BuildEdition).exe") -eq $false) {
-        $null = Invoke-WebRequest -Uri "https://vscode-update.azurewebsites.net/latest/$($BitVersion)/$($BuildEdition)" -OutFile "$env:TEMP\vscode-$($BuildEdition).exe"
+        $null = Invoke-WebRequest -UseBasicParsing -Uri "https://vscode-update.azurewebsites.net/latest/$($BitVersion)/$($BuildEdition)" -OutFile "$env:TEMP\vscode-$($BuildEdition).exe"
     }
 
     Write-Host "`nInstalling VS Code..." -ForegroundColor Yellow
@@ -283,7 +283,7 @@ function Get-Metadata {
         $UrlPrefix = 'http://169.254.169.254/metadata'
     )
 
-    $response = Invoke-WebRequest -Uri "$($UrlPrefix)$($Path)" -Method GET -Headers @{Metadata = "true" }
+    $response = Invoke-WebRequest -UseBasicParsing -Uri "$($UrlPrefix)$($Path)" -Method GET -Headers @{Metadata = "true" }
     $content = $response.Content | ConvertFrom-Json
     return $content
 }
@@ -319,7 +319,7 @@ $kv = Get-Metadata -Path '/identity/oauth2/token?api-version=2018-02-01&resource
 $kvToken = $kv.access_token 
 $kvUrl = "$($tags['environment'])-kv-$($tags['namespace']).vault.azure.net"
 $kvSecret = "$($instance.compute.name)-admin-password"
-$content = (Invoke-WebRequest -Uri https://$kvUrl/secrets/$($kvSecret)?api-version=2016-10-01 -Method GET -Headers @{Authorization = "Bearer $kvToken" }).content | ConvertFrom-Json
+$content = (Invoke-WebRequest -UseBasicParsing -Uri https://$kvUrl/secrets/$($kvSecret)?api-version=2016-10-01 -Method GET -Headers @{Authorization = "Bearer $kvToken" }).content | ConvertFrom-Json
 
 write-output "Enable AutoLogon"
 Set-SecureAutoLogon -Username 'gchadmin' -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) 
