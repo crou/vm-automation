@@ -7,19 +7,18 @@ function install-vscode {
         $BitVersion = 'win32-x64',
         $BuildEdition = 'stable'
     )
+    # check if already installed
+    if ((Test-Path -Path "$env:ProgramFiles\Microsoft VS Code\code.exe") -eq $true) {
+        write-output "VS Code already installed"
+        return
+    }
     # check if already downloaded
     if ((Test-Path -Path "$env:TEMP\vscode-$($BuildEdition).exe") -eq $false) {
         $null = Invoke-WebRequest -Uri "https://vscode-update.azurewebsites.net/latest/$($BitVersion)/$($BuildEdition)" -OutFile "$env:TEMP\vscode-$($BuildEdition).exe"
     }
 
-    # check if already installed
-    if ((Test-Path -Path "$env:ProgramFiles\Microsoft VS Code\code.exe") -eq $true) {
-        write-output "VS Code already installed"
-    }
-    else {
-        Write-Host "`nInstalling VS Code..." -ForegroundColor Yellow
-        Start-Process -Wait "$env:TEMP\vscode-$($BuildEdition).exe" -ArgumentList /silent, /mergetasks=!runcode    
-    }
+    Write-Host "`nInstalling VS Code..." -ForegroundColor Yellow
+    Start-Process -Wait "$env:TEMP\vscode-$($BuildEdition).exe" -ArgumentList /silent, /mergetasks=!runcode    
 
 }
 
@@ -269,14 +268,60 @@ function Set-SecureAutoLogon {
     }
 }
 
+function Set-AutoRun {
+    param(
+        $Path,
+        $Name = "AutoRun"
+    )
+    $runKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" 
+    $null = New-ItemProperty -Path $runKey -Name $Name -Value $Path -PropertyType ExpandString -Force
+}
+
+function Get-Metadata {
+    param(
+        $Path = '/instance?api-version=2019-03-11',
+        $UrlPrefix = 'http://169.254.169.254/metadata'
+    )
+
+    $response = Invoke-WebRequest -Uri "$($UrlPrefix)$($Path)" -Method GET -Headers @{Metadata = "true" }
+    $content = $response.Content | ConvertFrom-Json
+    return $content
+}
+
+function Get-Tags {
+    param (
+        $InputObject
+    )
+    # Create hashtable
+    $dictionary = @{ }
+    # Split input string into pairs
+    $InputObject.Split(';') | ForEach-Object {
+        # Split each pair into key and value
+        $key, $value = $_.Split(':')
+        # Populate $dictionary
+        $dictionary[$key] = $value
+    }
+    return $dictionary
+}
 ##################################################
 $ErrorActionPreference = 'Stop'
 
-# Get the Azure Vault token 
-$response = Invoke-WebRequest -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Method GET -Headers @{Metadata = "true" }
-$content = $response.Content | ConvertFrom-Json
-$KeyVaultToken = $content.access_token 
-#(Invoke-WebRequest -Uri https://<your-key-vault-URL>/secrets/<secret-name>?api-version=2016-10-01 -Method GET -Headers @{Authorization="Bearer $KeyVaultToken"}).content
+$instance = Get-Metadata
+$tags = Get-Tags $instance.compute.tags
 
-install-vscode
+if ($instance.compute.name -like 'tst*') {
+    install-vscode
+}
+
+# Get the Azure Vault token 
+write-output "Read Key Vault"
+$kv = Get-Metadata -Path '/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net'
+$kvToken = $kv.access_token 
+$kvUrl = "$($tags['environment'])-kv-$($tags['namespace']).vault.azure.net"
+$kvSecret = "$($instance.compute.name)-admin-password"
+$content = (Invoke-WebRequest -Uri https://$kvUrl/secrets/$($kvSecret)?api-version=2016-10-01 -Method GET -Headers @{Authorization = "Bearer $kvToken" }).content | ConvertFrom-Json
+
+write-output "Enable AutoLogon"
+Set-SecureAutoLogon -Username 'gchadmin' -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) 
+Set-AutoRun -Name "Connect-VPN" -Path "powershell.exe -WindowStyle Hidden -File $psscriptroot\gch-utility-bootstrap.ps1"
 Stop-Transcript -ErrorAction SilentlyContinue
