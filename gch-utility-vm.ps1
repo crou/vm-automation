@@ -2,24 +2,42 @@
 # this is an initial setup for a vm
 Start-Transcript -Path $psscriptroot\transcript.log -Force -ErrorAction SilentlyContinue
 
-# Install VS Code
-function install-vscode {
+
+function Install-Software {
     param (
-        $BitVersion = 'win32-x64',
-        $BuildEdition = 'stable'
+        [Parameter(Mandatory)]
+        $Name,
+        [Parameter(Mandatory)]
+        $Download,
+        [Parameter(Mandatory)]
+        $VerifyPath,
+        $InstallArgument = '/silent'
     )
-    # check if already installed
-    if ((Test-Path -Path "$env:ProgramFiles\Microsoft VS Code\code.exe") -eq $true) {
-        write-output "VS Code already installed"
+    $binName = split-path -leaf $Download
+    if ($binName -notlike '*.exe') {
+        $binName = "setup-$($binName).exe"
+    }
+    # check if the software already installed
+    if ((Test-Path -Path $VerifyPath -ErrorAction SilentlyContinue) -eq $true) {
+        write-output "$Name is installed"
         return
     }
     # check if already downloaded
-    if ((Test-Path -Path "$env:TEMP\vscode-$($BuildEdition).exe") -eq $false) {
-        $null = Invoke-WebRequest -UseBasicParsing -Uri "https://vscode-update.azurewebsites.net/latest/$($BitVersion)/$($BuildEdition)" -OutFile "$env:TEMP\vscode-$($BuildEdition).exe"
+    if ((Test-Path -Path "$env:TEMP\$binName") -eq $false) {
+        write-output "Download $binName"
+        $null = Invoke-WebRequest -UseBasicParsing -Uri $Download -OutFile "$env:TEMP\$binName"
     }
 
-    Write-Host "`nInstalling VS Code..." -ForegroundColor Yellow
-    Start-Process -Wait "$env:TEMP\vscode-$($BuildEdition).exe" -ArgumentList /silent, /mergetasks=!runcode
+    Write-Host "`nInstall $($Name)..." -ForegroundColor Yellow
+    $null = Start-Process -Wait "$env:TEMP\$binName" -ArgumentList $InstallArgument
+
+    # check now installed
+    if ((Test-Path -Path $VerifyPath -ErrorAction SilentlyContinue) -eq $true) {
+        write-output "Successfully Installed $binName"
+    }
+    else {
+        write-error "[$name]`tInstallation Error - Validation File Not found: $VerifyPath"
+    }
 
 }
 
@@ -307,12 +325,17 @@ function Get-Tags {
 ##################################################
 $ErrorActionPreference = 'Stop'
 
+# Install software
+Install-Software -Name 'VSCode'        -Download "https://vscode-update.azurewebsites.net/latest/win32-x64/stable" -VerifyPath "$env:ProgramFiles\Microsoft VS Code\code.exe" -InstallArgument "/silent /mergetasks=!runcode"
+Install-Software -Name 'SQLAnywhere17' -Download 'http://d5d4ifzqzkhwt.cloudfront.net/sqla17client/SQLA17_Windows_Client.exe' -VerifyPath "$env:ProgramFiles\SQL Anywhere 17\Bin64\scjview.exe" -InstallArgument '/s /a /l:1033 /s "/v: /qn /norestart"'
+
+# Get the context from the Azure Metadata service
 $instance = Get-Metadata
 $tags = Get-Tags $instance.compute.tags
 
-if ($instance.compute.name -like 'tst*') {
-    install-vscode
-}
+# Once we have the Azure Context (for tags), Install the Cisco AnyConnect Client...
+Install-Software -Name "AnyConnect"    -Download "https://$($tags['environment'])stinfraprovision.blob.core.windows.net/bin/anyconnect-win-3.1.00495-web-deploy-k9.exe" -InstallArgument "/qn /norestart" -VerifyPath "${env:ProgramFiles(x86)}\Cisco\Cisco AnyConnect Secure Mobility Client\vpncli.exe"
+
 
 # Get the Azure Vault token
 write-output "Read Key Vault"
@@ -329,14 +352,6 @@ if ($user -eq $null) {
     write-output "Create autlogin user: $vpnuser"
     $null = New-LocalUser $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) -FullName "VPN Operator" -Description "Auto Login user to connect to vpn" -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword
     $null = Add-LocalGroupMember -Group "Remote Desktop Users" -Member $vpnuser
-}
-# Install Cisco Anyconnect client
-if ((Test-Path -Path "${env:ProgramFiles(x86)}\Cisco\Cisco AnyConnect Secure Mobility Client\vpncli.exe") -eq $false) {
-    Write-Output "Download Anyconnect"
-    $anyconnectUrl = "https://$($tags['environment'])stinfraprovision.blob.core.windows.net/bin/anyconnect-win-3.1.00495-web-deploy-k9.exe"
-    $null = Invoke-WebRequest -UseBasicParsing -Uri $anyconnectUrl -OutFile "$env:TEMP\anyconnect.exe"
-    Write-Output "Install Anyconnect"
-    $null = Start-Process -FilePath "$env:TEMP\anyconnect.exe" -ArgumentList "/qn /norestart" -Wait
 }
 
 write-output "Enable AutoLogon for $vpnuser"
