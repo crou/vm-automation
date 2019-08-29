@@ -233,7 +233,7 @@ Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
 # Read vm instance context / metadata
 $instance = Get-Metadata
 $tags = Get-Tags $instance.compute.tags
-$webhookUri = 'https://outlook.office.com/webhook/dd61eade-0727-48f2-8025-c032bc8311d6@944dad0f-d51b-4889-bd6e-da46032d3301/IncomingWebhook/a8f324f51beb4f64a1d5023e4fb9cbc6/6f5b9aa7-8a39-487d-bf03-ef6af6890b98'
+$webhookUri = ''
 
 # Get the Azure Vault token
 write-output "$(Get-Date -Format "o")`tRead Key Vault"
