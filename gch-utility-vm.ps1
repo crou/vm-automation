@@ -328,6 +328,7 @@ $ErrorActionPreference = 'Stop'
 # Install software
 Install-Software -Name 'VSCode'        -Download "https://vscode-update.azurewebsites.net/latest/win32-x64/stable" -VerifyPath "$env:ProgramFiles\Microsoft VS Code\code.exe" -InstallArgument "/silent /mergetasks=!runcode"
 Install-Software -Name 'SQLAnywhere17' -Download 'http://d5d4ifzqzkhwt.cloudfront.net/sqla17client/SQLA17_Windows_Client.exe' -VerifyPath "$env:ProgramFiles\SQL Anywhere 17\Bin64\scjview.exe" -InstallArgument '/s /a /l:1033 /s "/v: /qn /norestart"'
+Install-Software -Name 'Dotnet-Core' -Download 'https://download.visualstudio.microsoft.com/download/pr/a9bb6d52-5f3f-4f95-90c2-084c499e4e33/eba3019b555bb9327079a0b1142cc5b2/dotnet-hosting-2.2.6-win.exe' -VerifyPath "$env:ProgramFiles\dotnet\dotnet.exe" -InstallArgument '/install /norestart /quiet'
 
 # Get the context from the Azure Metadata service
 $instance = Get-Metadata
@@ -358,4 +359,6 @@ write-output "Enable AutoLogon for $vpnuser"
 Set-SecureAutoLogon -Username $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force)
 write-output "Enable the Bootstrap"
 Set-AutoRun -Name "Connect-VPN" -Path "powershell.exe -File $psscriptroot\gch-utility-bootstrap.ps1"
+$null = New-ItemProperty -Path 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -Value 1 -Force
+$null = New-ItemProperty -Path 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ConsentPromptBehaviorAdmin' -value 0 -force	
 Stop-Transcript -ErrorAction SilentlyContinue
