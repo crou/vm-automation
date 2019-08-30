@@ -352,7 +352,7 @@ $user = Get-LocalUser -Name $vpnuser -ErrorAction SilentlyContinue
 if ($user -eq $null) {
     write-output "Create autlogin user: $vpnuser"
     $null = New-LocalUser $vpnuser -Password ($content.value | ConvertTo-SecureString -AsPlainText -Force) -FullName "VPN Operator" -Description "Auto Login user to connect to vpn" -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword
-    $null = Add-LocalGroupMember -Group "Remote Desktop Users" -Member $vpnuser
+    $null = Add-LocalGroupMember -Group "Administrators" -Member $vpnuser
 }
 
 write-output "Enable AutoLogon for $vpnuser"

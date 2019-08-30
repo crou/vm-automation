@@ -5,7 +5,7 @@ if ($session -match '^>console') {
 }
 else {
     write-output "$(Get-Date -Format "o")`tRunning in RDP. Exiting."
-    #    return
+    return
 }
 
 # Retrieve info from the azure metadata service
